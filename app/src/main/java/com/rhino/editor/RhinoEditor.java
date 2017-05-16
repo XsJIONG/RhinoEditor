@@ -1,11 +1,12 @@
 package com.rhino.editor;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.BitmapDrawable;
 import android.os.Looper;
@@ -15,20 +16,27 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnTouchListener;
-import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.Toast;
+import com.rhino.editor.example.R;
+import dalvik.system.DexFile;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
 import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import android.app.Activity;
-import android.content.DialogInterface;
-import android.view.Window;
 
 public class RhinoEditor
 {
@@ -39,6 +47,7 @@ public class RhinoEditor
 	
 	private static Context octx;
 	private static Context ctx;
+	private static List<ClassInfo> classList=new ArrayList<ClassInfo>();
 	private static AssetManager am;
 	private static LinearLayout floatLayout;
 	private static WindowManager.LayoutParams floatParams;
@@ -46,6 +55,10 @@ public class RhinoEditor
 	private static Button tempButton;
 	private static int floatx=0;
 	private static int floaty=0;
+	private static String nowClass="";
+	private static Spinner spin;
+	private static EditText edit;
+	private static ArrayAdapter<ClassInfo> adapter;
 	private static int StatesBarHeight;
 
 	private static void createFloatView() {
@@ -96,12 +109,21 @@ public class RhinoEditor
 	}
 	
 	private static void createEditDialog() {
+		getPackage();
 		AlertDialog.Builder builder=new AlertDialog.Builder(ctx);
 		builder.setTitle("执行代码");
-		final EditText edit=new EditText(ctx);
-		edit.setHint("代码");
-		builder.setView(edit);
 		builder.setCancelable(true);
+		LinearLayout layout=new LinearLayout(ctx);
+		layout.setOrientation(LinearLayout.VERTICAL);
+		spin=new Spinner(ctx);
+		layout.addView(spin);
+		adapter=new ArrayAdapter<ClassInfo>(ctx, android.R.layout.simple_list_item_1, classList);
+		spin.setAdapter(adapter);
+		nowClass="com";
+		updateData();
+		edit=new EditText(ctx);
+		layout.addView(edit);
+		edit.setHint("代码");
 		builder.setPositiveButton("执行", new DialogInterface.OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int position) {
@@ -115,17 +137,35 @@ public class RhinoEditor
 				createFloatView();
 			}
 		});
-		AlertDialog dialog=builder.create();
+		builder.setView(layout);
+		final AlertDialog dialog=builder.create();
 		dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
 		dialog.show();
 	}
 	
+	private static void updateData() {
+		try {
+			classList=new ArrayList<ClassInfo>();
+			Class c=Class.forName(nowClass);
+			Field[] fields=c.getDeclaredFields();
+			Method[] methods=c.getDeclaredMethods();
+			Class[] classes=c.getDeclaredClasses();
+			Constructor[] constructors=c.getDeclaredConstructors();
+			for (Class cc : classes) classList.add(new ClassInfo(cc, cc.getName()));
+			for (Method m : methods) classList.add(new ClassInfo(m, m.getName()));
+			for (Field f : fields) classList.add(new ClassInfo(f, f.getName()));
+			for (Constructor con : constructors) classList.add(new ClassInfo(con, con.getName()));
+		} catch (Exception e) {
+			err(e);
+		}
+	}
+	
 	public static void create(Context context) {
+		try {
 		octx=context;
 		ctx=context.getApplicationContext();
 		am=ctx.getAssets();
 		StatesBarHeight=getStatesBarHeight();
-		try {
 		createFloatView();
 		} catch (Exception e) {
 			Toast.makeText(ctx, e.toString(), Toast.LENGTH_SHORT).show();
@@ -265,5 +305,85 @@ public class RhinoEditor
 				di.show();
 			}
 		});
+	}
+	
+	static class ClassInfo {
+		public static final String TCLASS="类";
+		public static final String TFIELD="成员";
+		public static final String TMETHOD="方法";
+		public static final String TCONSTRUCTOR="构造方法";
+		public static final String TPACKAGE="包";
+		private Object content;
+		private String type;
+		private String description;
+		private String name;
+		public ClassInfo() {}
+		public ClassInfo(Object acon, String aname) {
+			this.name=aname;
+			this.content=acon;
+			update();
+		}
+		public String getType() {return type;}public void setContent(Object acon) {
+			this.content=acon;
+			update();
+		}
+		private void update() {
+			int mod=0;
+			switch (type) {
+				case TCLASS:
+					Class c=(Class) content;
+					mod=c.getModifiers();
+					name=c.getName();
+					break;
+				case TFIELD:
+					Field f=(Field) content;
+					mod=f.getModifiers();
+					name=f.getName();
+					break;
+				case TMETHOD:
+					Method m=(Method) content;
+					mod=m.getModifiers();
+					name=m.getName();
+					break;
+				case TCONSTRUCTOR:
+					Constructor co=(Constructor) content;
+					mod=co.getModifiers();
+					name=co.getName();
+					break;
+			}
+			description=Modifier.toString(mod);
+		}
+		public Object get() {return content;}
+		@Override public String toString() {return add("[",type,"][",description,"]",name);};
+	}
+	
+	private static String add(String...a) {
+		StringBuilder b=new StringBuilder();
+		for (String one : a) {
+			b.append(one);
+		}
+		return b.toString();
+	}
+	
+	private static void getPackage() {
+		try {
+			String path=ctx.getPackageManager().getApplicationInfo(ctx.getPackageName(), 0).sourceDir;
+			Log.i(TAG, path);
+			DexFile dexfile=new DexFile(path);
+			Enumeration entries=dexfile.entries();
+			while (entries.hasMoreElements()) {
+				String n=(String) entries.nextElement();
+			}
+		} catch (Exception e) {
+			err(e);
+		}
+	}
+	
+	static class Node {
+		public Node parent;
+		public 
+		public Node() {}
+		
+		
 	}
 }

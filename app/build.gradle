@@ -5,7 +5,7 @@ android {
     buildToolsVersion "21.1.0"
 
     defaultConfig {
-        applicationId "com.rhino.editor"
+        applicationId "com.rhino.editor.example"
         minSdkVersion 14
         targetSdkVersion 21
         versionCode 1

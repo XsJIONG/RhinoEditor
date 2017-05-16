@@ -58,6 +58,7 @@ public class RhinoEditor
 	private static String nowClass="";
 	private static Spinner spin;
 	private static EditText edit;
+	private static Node root;
 	private static ArrayAdapter<ClassInfo> adapter;
 	private static int StatesBarHeight;
 
@@ -109,7 +110,7 @@ public class RhinoEditor
 	}
 	
 	private static void createEditDialog() {
-		getPackage();
+		initPackage();
 		AlertDialog.Builder builder=new AlertDialog.Builder(ctx);
 		builder.setTitle("执行代码");
 		builder.setCancelable(true);
@@ -151,10 +152,10 @@ public class RhinoEditor
 			Method[] methods=c.getDeclaredMethods();
 			Class[] classes=c.getDeclaredClasses();
 			Constructor[] constructors=c.getDeclaredConstructors();
-			for (Class cc : classes) classList.add(new ClassInfo(cc, cc.getName()));
-			for (Method m : methods) classList.add(new ClassInfo(m, m.getName()));
-			for (Field f : fields) classList.add(new ClassInfo(f, f.getName()));
-			for (Constructor con : constructors) classList.add(new ClassInfo(con, con.getName()));
+			for (Class cc : classes) classList.add(new ClassInfo(cc));
+			for (Method m : methods) classList.add(new ClassInfo(m));
+			for (Field f : fields) classList.add(new ClassInfo(f));
+			for (Constructor con : constructors) classList.add(new ClassInfo(con));
 		} catch (Exception e) {
 			err(e);
 		}
@@ -318,8 +319,7 @@ public class RhinoEditor
 		private String description;
 		private String name;
 		public ClassInfo() {}
-		public ClassInfo(Object acon, String aname) {
-			this.name=aname;
+		public ClassInfo(Object acon) {
 			this.content=acon;
 			update();
 		}
@@ -328,7 +328,9 @@ public class RhinoEditor
 			update();
 		}
 		private void update() {
+			if (content instanceof Class) type=TCLASS; else if (content instanceof Field) type=TFIELD; else if (content instanceof Method) type=TMETHOD; else if (content instanceof String) type=TPACKAGE; else if (content instanceof Constructor) type=TCONSTRUCTOR;
 			int mod=0;
+			boolean q=false;
 			switch (type) {
 				case TCLASS:
 					Class c=(Class) content;
@@ -350,8 +352,14 @@ public class RhinoEditor
 					mod=co.getModifiers();
 					name=co.getName();
 					break;
+				case TPACKAGE:
+					String s=(String) content;
+					description="无";
+					q=true;
+					name=s;
+					break;
 			}
-			description=Modifier.toString(mod);
+			if (!q) description=Modifier.toString(mod);
 		}
 		public Object get() {return content;}
 		@Override public String toString() {return add("[",type,"][",description,"]",name);};
@@ -365,14 +373,15 @@ public class RhinoEditor
 		return b.toString();
 	}
 	
-	private static void getPackage() {
+	private static void initPackage() {
 		try {
+			root=new Node(null);
 			String path=ctx.getPackageManager().getApplicationInfo(ctx.getPackageName(), 0).sourceDir;
 			Log.i(TAG, path);
 			DexFile dexfile=new DexFile(path);
 			Enumeration entries=dexfile.entries();
 			while (entries.hasMoreElements()) {
-				String n=(String) entries.nextElement();
+				String[] n=((String) entries.nextElement()).split("\\.");
 			}
 		} catch (Exception e) {
 			err(e);
@@ -380,10 +389,38 @@ public class RhinoEditor
 	}
 	
 	static class Node {
-		public Node parent;
-		public 
-		public Node() {}
-		
-		
+		public Node parent=null;
+		public List<Node> son;
+		public ClassInfo data;
+		public Node(ClassInfo adata) {
+			son=new ArrayList<Node>();
+			data=adata;
+		}
+		public Node(Node paren, ClassInfo adata) {
+			parent=paren;
+			son=new ArrayList<Node>();
+			parent.addSon(this);
+			data=adata;
+		}
+		public void addSon(Node ason) {
+			this.son.add(ason);
+		}
+		public void addSon(String[] ason) {
+			Node n=this;
+			for (String one : ason) {
+				boolean find=false;
+				for (int i=0;i<son.size();i++) {
+					Node q=son.get(i);
+					if (q.data.name.equals(one)) {
+						n=q;
+						find=true;
+						break;
+					}
+				}
+				if (!find) {
+					Node w=new Node(n, new ClassInfo(one));
+				}
+			}
+		}
 	}
 }

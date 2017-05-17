@@ -37,6 +37,9 @@ import java.util.List;
 import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import android.widget.AdapterView.OnItemSelectedListener;
+import android.widget.AdapterView;
+import android.widget.Adapter;
 
 public class RhinoEditor
 {
@@ -47,7 +50,7 @@ public class RhinoEditor
 	
 	private static Context octx;
 	private static Context ctx;
-	private static List<ClassInfo> classList=new ArrayList<ClassInfo>();
+	private static List<Node> classList=new ArrayList<Node>();
 	private static AssetManager am;
 	private static LinearLayout floatLayout;
 	private static WindowManager.LayoutParams floatParams;
@@ -55,11 +58,11 @@ public class RhinoEditor
 	private static Button tempButton;
 	private static int floatx=0;
 	private static int floaty=0;
-	private static String nowClass="";
+	private static Node nowNode;
 	private static Spinner spin;
 	private static EditText edit;
 	private static Node root;
-	private static ArrayAdapter<ClassInfo> adapter;
+	private static ArrayAdapter<Node> adapter;
 	private static int StatesBarHeight;
 
 	private static void createFloatView() {
@@ -118,10 +121,20 @@ public class RhinoEditor
 		layout.setOrientation(LinearLayout.VERTICAL);
 		spin=new Spinner(ctx);
 		layout.addView(spin);
-		adapter=new ArrayAdapter<ClassInfo>(ctx, android.R.layout.simple_list_item_1, classList);
+		adapter=new ArrayAdapter<Node>(ctx, android.R.layout.simple_list_item_1, classList);
 		spin.setAdapter(adapter);
-		nowClass="com";
-		updateData();
+		spin.setOnItemSelectedListener(new OnItemSelectedListener() {
+			@Override
+			public void onItemSelected(AdapterView<?> p1, View p2, int p3, long p4) {
+				Node q=(Node) ((Spinner) p1).getItemAtPosition(p3);
+				q.open();
+			}
+			@Override
+			public void onNothingSelected(AdapterView<?> p1) {
+				
+			}
+		});
+		//nowNode.data.open();
 		edit=new EditText(ctx);
 		layout.addView(edit);
 		edit.setHint("代码");
@@ -144,28 +157,12 @@ public class RhinoEditor
 		dialog.show();
 	}
 	
-	private static void updateData() {
-		try {
-			classList=new ArrayList<ClassInfo>();
-			Class c=Class.forName(nowClass);
-			Field[] fields=c.getDeclaredFields();
-			Method[] methods=c.getDeclaredMethods();
-			Class[] classes=c.getDeclaredClasses();
-			Constructor[] constructors=c.getDeclaredConstructors();
-			for (Class cc : classes) classList.add(new ClassInfo(cc));
-			for (Method m : methods) classList.add(new ClassInfo(m));
-			for (Field f : fields) classList.add(new ClassInfo(f));
-			for (Constructor con : constructors) classList.add(new ClassInfo(con));
-		} catch (Exception e) {
-			err(e);
-		}
-	}
-	
 	public static void create(Context context) {
 		try {
 		octx=context;
 		ctx=context.getApplicationContext();
 		am=ctx.getAssets();
+		root=new Node();
 		StatesBarHeight=getStatesBarHeight();
 		createFloatView();
 		} catch (Exception e) {
@@ -254,7 +251,7 @@ public class RhinoEditor
 				scope=cx.initStandardObjects(host, false);
 				scope.defineFunctionProperties(host.getHostFunction(), JSHostFunction.class, ScriptableObject.DONTENUM);
 			} catch (Exception e) {
-				err(e);
+				Log.e(TAG, e.toString());
 			}
 		}
 
@@ -327,6 +324,7 @@ public class RhinoEditor
 			this.content=acon;
 			update();
 		}
+		public String getName() {return name;}
 		private void update() {
 			if (content instanceof Class) type=TCLASS; else if (content instanceof Field) type=TFIELD; else if (content instanceof Method) type=TMETHOD; else if (content instanceof String) type=TPACKAGE; else if (content instanceof Constructor) type=TCONSTRUCTOR;
 			int mod=0;
@@ -362,7 +360,9 @@ public class RhinoEditor
 			if (!q) description=Modifier.toString(mod);
 		}
 		public Object get() {return content;}
-		@Override public String toString() {return add("[",type,"][",description,"]",name);};
+		@Override public String toString() {
+			if (type == TPACKAGE) return add("[",type,"]",name); else return add("[",type,"][",description,"]",name);
+		};
 	}
 	
 	private static String add(String...a) {
@@ -375,13 +375,31 @@ public class RhinoEditor
 	
 	private static void initPackage() {
 		try {
-			root=new Node(null);
+			nowNode=root;
 			String path=ctx.getPackageManager().getApplicationInfo(ctx.getPackageName(), 0).sourceDir;
 			Log.i(TAG, path);
 			DexFile dexfile=new DexFile(path);
 			Enumeration entries=dexfile.entries();
 			while (entries.hasMoreElements()) {
-				String[] n=((String) entries.nextElement()).split("\\.");
+				Node q=null;
+				try {
+				String n=(String) entries.nextElement();
+				q=nowNode.getSon(n);
+				} catch (Exception e) {
+					Log.e(TAG, "%!#%!"+e.toString());
+				}
+				try {
+					if (q.allname.trim().equals("")) continue;
+					if (q == null) continue;
+					q.data.setContent(Class.forName(q.allname));
+				} catch (Exception e) {
+					Log.e(TAG, "@#@#@#"+e.toString());
+				}
+			}
+			classList=new ArrayList<Node>();
+			List<Node> qq=root.son;
+			for (int i=0;i<qq.size();i++) {
+				classList.add(qq.get(i));
 			}
 		} catch (Exception e) {
 			err(e);
@@ -391,35 +409,48 @@ public class RhinoEditor
 	static class Node {
 		public Node parent=null;
 		public List<Node> son;
-		public ClassInfo data;
-		public Node(ClassInfo adata) {
+		public ClassInfo data=null;
+		public String allname;
+		public Node() {
 			son=new ArrayList<Node>();
-			data=adata;
+			allname="";
 		}
 		public Node(Node paren, ClassInfo adata) {
 			parent=paren;
 			son=new ArrayList<Node>();
 			parent.addSon(this);
 			data=adata;
+			if (parent.allname.equals("")) allname=data.getName(); else allname=parent.allname+"."+data.getName();
 		}
 		public void addSon(Node ason) {
 			this.son.add(ason);
 		}
-		public void addSon(String[] ason) {
-			Node n=this;
-			for (String one : ason) {
-				boolean find=false;
-				for (int i=0;i<son.size();i++) {
-					Node q=son.get(i);
-					if (q.data.name.equals(one)) {
-						n=q;
-						find=true;
-						break;
-					}
-				}
-				if (!find) {
-					Node w=new Node(n, new ClassInfo(one));
-				}
+		public Node getSingleSon(String aname) {
+			for (int i=0;i<son.size();i++) {
+				Node t=son.get(i);
+				if (t.data.getName().equals(aname)) return t;
+			}
+			return new Node(this, new ClassInfo(aname));
+		}
+		public Node getSon(String ason) {
+			if (ason.startsWith("org.mozilla.classfile")||ason.startsWith("org.mozilla.javascript")) return null;
+			String[] d=ason.split("\\.");
+			Node n=root;
+			for (String o : d) n=n.getSingleSon(o);
+			try {
+				n.data.setContent(Class.forName(n.allname));
+			} catch (Exception e) {
+				//err(e);
+				Log.e(TAG, "#!@#!"+e.toString());
+			}
+			return n;
+		}
+		@Override public String toString() {return data.toString();}
+		public void open() {
+			switch (data.type) {
+				case ClassInfo.TPACKAGE:
+					classList=new ArrayList<Node>();
+					
 			}
 		}
 	}

@@ -450,7 +450,13 @@ public class RhinoEditor
 			switch (data.type) {
 				case ClassInfo.TPACKAGE:
 					classList=new ArrayList<Node>();
-					
+					nowNode=this;
+					for (int i=0;i<son.size();i++) {
+						classList.add(son.get(i));
+					}
+					adapter=new ArrayAdapter<Node>(ctx, android.R.layout.simple_list_item_1, classList);
+					spin.setAdapter(adapter);
+					break;
 			}
 		}
 	}

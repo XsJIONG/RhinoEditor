@@ -50,7 +50,6 @@ public class RhinoEditor
 	
 	private static Context octx;
 	private static Context ctx;
-	private static List<Node> classList=new ArrayList<Node>();
 	private static AssetManager am;
 	private static LinearLayout floatLayout;
 	private static WindowManager.LayoutParams floatParams;
@@ -59,10 +58,8 @@ public class RhinoEditor
 	private static int floatx=0;
 	private static int floaty=0;
 	private static Node nowNode;
-	private static Spinner spin;
 	private static EditText edit;
 	private static Node root;
-	private static ArrayAdapter<Node> adapter;
 	private static int StatesBarHeight;
 
 	private static void createFloatView() {
@@ -119,19 +116,13 @@ public class RhinoEditor
 		builder.setCancelable(true);
 		LinearLayout layout=new LinearLayout(ctx);
 		layout.setOrientation(LinearLayout.VERTICAL);
-		spin=new Spinner(ctx);
-		layout.addView(spin);
-		adapter=new ArrayAdapter<Node>(ctx, android.R.layout.simple_list_item_1, classList);
-		spin.setAdapter(adapter);
-		spin.setOnItemSelectedListener(new OnItemSelectedListener() {
+		Button open=new Button(ctx);
+		layout.addView(open);
+		open.setText("包视图");
+		open.setOnClickListener(new OnClickListener() {
 			@Override
-			public void onItemSelected(AdapterView<?> p1, View p2, int p3, long p4) {
-				Node q=(Node) ((Spinner) p1).getItemAtPosition(p3);
-				q.open();
-			}
-			@Override
-			public void onNothingSelected(AdapterView<?> p1) {
-				
+			public void onClick(View view) {
+				nowNode.open();
 			}
 		});
 		//nowNode.data.open();
@@ -163,10 +154,12 @@ public class RhinoEditor
 		ctx=context.getApplicationContext();
 		am=ctx.getAssets();
 		root=new Node();
+		root.data=new ClassInfo();
+		root.data.type=ClassInfo.TPACKAGE;
 		StatesBarHeight=getStatesBarHeight();
 		createFloatView();
 		} catch (Exception e) {
-			Toast.makeText(ctx, e.toString(), Toast.LENGTH_SHORT).show();
+			err(e);
 		}
 	}
 	
@@ -377,7 +370,6 @@ public class RhinoEditor
 		try {
 			nowNode=root;
 			String path=ctx.getPackageManager().getApplicationInfo(ctx.getPackageName(), 0).sourceDir;
-			Log.i(TAG, path);
 			DexFile dexfile=new DexFile(path);
 			Enumeration entries=dexfile.entries();
 			while (entries.hasMoreElements()) {
@@ -386,20 +378,15 @@ public class RhinoEditor
 				String n=(String) entries.nextElement();
 				q=nowNode.getSon(n);
 				} catch (Exception e) {
-					Log.e(TAG, "%!#%!"+e.toString());
+					err(e);
 				}
 				try {
 					if (q.allname.trim().equals("")) continue;
 					if (q == null) continue;
 					q.data.setContent(Class.forName(q.allname));
 				} catch (Exception e) {
-					Log.e(TAG, "@#@#@#"+e.toString());
+					err(e);
 				}
-			}
-			classList=new ArrayList<Node>();
-			List<Node> qq=root.son;
-			for (int i=0;i<qq.size();i++) {
-				classList.add(qq.get(i));
 			}
 		} catch (Exception e) {
 			err(e);
@@ -440,8 +427,7 @@ public class RhinoEditor
 			try {
 				n.data.setContent(Class.forName(n.allname));
 			} catch (Exception e) {
-				//err(e);
-				Log.e(TAG, "#!@#!"+e.toString());
+				err(e);
 			}
 			return n;
 		}
@@ -449,13 +435,24 @@ public class RhinoEditor
 		public void open() {
 			switch (data.type) {
 				case ClassInfo.TPACKAGE:
-					classList=new ArrayList<Node>();
-					nowNode=this;
-					for (int i=0;i<son.size();i++) {
-						classList.add(son.get(i));
-					}
-					adapter=new ArrayAdapter<Node>(ctx, android.R.layout.simple_list_item_1, classList);
-					spin.setAdapter(adapter);
+					AlertDialog.Builder b=new AlertDialog.Builder(ctx);
+					String ti=nowNode.data.type;
+					if (ti == "") ti="包视图";
+					b.setTitle(ti);
+					Node[] son=(Node[]) nowNode.son.toArray();
+					List<String> q=new ArrayList<String>();
+					for (Node one : son) q.add(one.data.getName());
+					String[] c=(String[]) q.toArray();
+					b.setItems(c, new DialogInterface.OnClickListener() {
+						@Override
+						public void onClick(DialogInterface dialog, int position) {
+							Node click=nowNode.son.get(position);
+							nowNode=click;
+							click.open();
+						}
+					});
+					b.setPositiveButton("返回", null);
+					b.show();
 					break;
 			}
 		}

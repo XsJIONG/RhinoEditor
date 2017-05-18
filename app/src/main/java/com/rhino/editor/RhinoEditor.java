@@ -119,12 +119,6 @@ public class RhinoEditor
 		Button open=new Button(ctx);
 		layout.addView(open);
 		open.setText("包视图");
-		open.setOnClickListener(new OnClickListener() {
-			@Override
-			public void onClick(View view) {
-				nowNode.open();
-			}
-		});
 		//nowNode.data.open();
 		edit=new EditText(ctx);
 		layout.addView(edit);
@@ -144,6 +138,17 @@ public class RhinoEditor
 		});
 		builder.setView(layout);
 		final AlertDialog dialog=builder.create();
+		open.setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View view) {
+				try {
+					dialog.dismiss();
+					nowNode.open();
+				} catch (Exception e) {
+					err(e);
+				}
+			}
+		});
 		dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
 		dialog.show();
 	}
@@ -436,7 +441,7 @@ public class RhinoEditor
 			switch (data.type) {
 				case ClassInfo.TPACKAGE:
 					AlertDialog.Builder b=new AlertDialog.Builder(ctx);
-					String ti=nowNode.data.type;
+					String ti=nowNode.allname;
 					if (ti == "") ti="包视图";
 					b.setTitle(ti);
 					Node[] son=(Node[]) nowNode.son.toArray();

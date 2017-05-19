@@ -40,6 +40,8 @@ import org.mozilla.javascript.ScriptableObject;
 import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.AdapterView;
 import android.widget.Adapter;
+import android.sax.RootElement;
+import android.app.ProgressDialog;
 
 public class RhinoEditor
 {
@@ -109,8 +111,16 @@ public class RhinoEditor
 		});
 	}
 	
+	public static void print(final String t) {
+		((Activity) octx).runOnUiThread(new Runnable() {
+			@Override
+			public void run() {
+				Toast.makeText(ctx, t, Toast.LENGTH_SHORT).show();
+			}
+		});
+	}
+	
 	private static void createEditDialog() {
-		initPackage();
 		AlertDialog.Builder builder=new AlertDialog.Builder(ctx);
 		builder.setTitle("执行代码");
 		builder.setCancelable(true);
@@ -142,7 +152,6 @@ public class RhinoEditor
 			@Override
 			public void onClick(View view) {
 				try {
-					dialog.dismiss();
 					nowNode.open();
 				} catch (Exception e) {
 					err(e);
@@ -161,6 +170,8 @@ public class RhinoEditor
 		root=new Node();
 		root.data=new ClassInfo();
 		root.data.type=ClassInfo.TPACKAGE;
+		nowNode=root;
+		initPackage();
 		StatesBarHeight=getStatesBarHeight();
 		createFloatView();
 		} catch (Exception e) {
@@ -222,8 +233,13 @@ public class RhinoEditor
 		 hehe
 		 hehe*/
 
-		public void print(Object what) {
-			Toast.makeText(ctx, what.toString(), Toast.LENGTH_SHORT).show();
+		public void print(final Object what) {
+			((Activity) octx).runOnUiThread(new Runnable() {
+				@Override
+				public void run() {
+					Toast.makeText(ctx, what.toString(), Toast.LENGTH_SHORT).show();
+				}
+			});
 		}
 
 		public void tc(String title, String msg) {
@@ -285,7 +301,8 @@ public class RhinoEditor
 	}
 	
 	private static void err(Exception e) {
-		Log.e(TAG, e.toString());
+		//alert("错误！",e.toString());
+		Log.e(TAG, "错误！"+e.toString());
 	}
 	
 	private static void alert(final String title, final String msg) {
@@ -297,18 +314,18 @@ public class RhinoEditor
 				b.setMessage(msg);
 				b.setPositiveButton("确定", null);
 				AlertDialog di=b.create();
-				di.getWindow().setType(WindowManager.LayoutParams.TYPE_PHONE);
+				di.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
 				di.show();
 			}
 		});
 	}
 	
 	static class ClassInfo {
-		public static final String TCLASS="类";
-		public static final String TFIELD="成员";
-		public static final String TMETHOD="方法";
-		public static final String TCONSTRUCTOR="构造方法";
-		public static final String TPACKAGE="包";
+		public static final String TCLASS="类💾";
+		public static final String TFIELD="成员⭐";
+		public static final String TMETHOD="方法💻";
+		public static final String TCONSTRUCTOR="构造方法💡";
+		public static final String TPACKAGE="包💼";
 		private Object content;
 		private String type;
 		private String description;
@@ -359,7 +376,7 @@ public class RhinoEditor
 		}
 		public Object get() {return content;}
 		@Override public String toString() {
-			if (type == TPACKAGE) return add("[",type,"]",name); else return add("[",type,"][",description,"]",name);
+			if (type == TPACKAGE) return add(type," ",name); else return add(type,name);
 		};
 	}
 	
@@ -380,8 +397,8 @@ public class RhinoEditor
 			while (entries.hasMoreElements()) {
 				Node q=null;
 				try {
-				String n=(String) entries.nextElement();
-				q=nowNode.getSon(n);
+					String n=(String) entries.nextElement();
+					q=nowNode.getSon(n);
 				} catch (Exception e) {
 					err(e);
 				}
@@ -444,22 +461,88 @@ public class RhinoEditor
 					String ti=nowNode.allname;
 					if (ti == "") ti="包视图";
 					b.setTitle(ti);
-					Node[] son=(Node[]) nowNode.son.toArray();
-					List<String> q=new ArrayList<String>();
-					for (Node one : son) q.add(one.data.getName());
-					String[] c=(String[]) q.toArray();
-					b.setItems(c, new DialogInterface.OnClickListener() {
+					final boolean r=(nowNode.allname == "");
+					String[] q;
+					int i;
+					if (r) {q=new String[son.size()];i=0;} else {q=new String[son.size()+1]; q[0]="/.."; i=1;}
+					for (Node one : son) {q[i]=one.data.toString();i++;}
+					b.setItems(q, new DialogInterface.OnClickListener() {
 						@Override
 						public void onClick(DialogInterface dialog, int position) {
-							Node click=nowNode.son.get(position);
-							nowNode=click;
-							click.open();
+							if (r) {
+								nowNode=nowNode.son.get(position);
+								nowNode.open();
+							} else {
+								if (position == 0) {
+									nowNode=nowNode.parent;
+									nowNode.open();
+								} else {
+									nowNode=nowNode.son.get(position-1);
+									nowNode.open();
+								}
+							}
 						}
 					});
-					b.setPositiveButton("返回", null);
-					b.show();
+					b.setPositiveButton("添加", new DialogInterface.OnClickListener() {
+						@Override
+						public void onClick(DialogInterface dialog, int position) {
+							edit.setText(edit.getText().toString()+nowNode.allname);
+							edit.setSelection(edit.length());
+							nowNode=root;
+						}
+					});
+					b.setCancelable(false);
+					b.setNegativeButton("取消", new DialogInterface.OnClickListener() {
+						@Override
+						public void onClick(DialogInterface dialog, int position) {
+							nowNode=root;
+						}
+					});
+					b.setNeutralButton("更多", new DialogInterface.OnClickListener() {
+						@Override
+						public void onClick(DialogInterface dialog, int position) {
+							String[] all={"创建实例","详情"};
+							AlertDialog.Builder w=new AlertDialog.Builder(ctx);
+							w.setTitle("更多");
+							w.setItems(all, new DialogInterface.OnClickListener() {
+								@Override
+								public void onClick(DialogInterface dialog, int po) {
+									switch (po) {
+										case 1:
+											showConfig();
+											break;
+									}
+								}
+							});
+						}
+					});
+					AlertDialog d=b.create();
+					d.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
+					d.show();
+					break;
+				case ClassInfo.TCLASS:
+					edit.setText(edit.getText().toString()+nowNode.allname);
+					edit.setSelection(edit.length());
+					nowNode=root;
 					break;
 			}
 		}
+	}
+	
+	private static void showConfig() {
+		String text="";
+		switch (nowNode.data.type) {
+			case ClassInfo.TCLASS:
+				text=add("类名:",nowNode.allname,"\n独名:");
+				String[] q=nowNode.allname.split("\\.");
+				text=add(text,q[q.length-1],"\n修饰关键词:",nowNode.data.description);
+				break;
+			case ClassInfo.TPACKAGE:
+				text=add("包名:",nowNode.allname,"\n独名:");
+				String[] qq=nowNode.allname.split("\\.");
+				text=add(text,qq[qq.length-1]);
+				break;
+		}
+		alert("详情", text);
 	}
 }
